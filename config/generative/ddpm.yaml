@@ -1,0 +1,77 @@
+project: "generative"
+model_name: ddpm
+steps: 100000
+logdir: ./exp
+expdir: ${logdir}/${project}/${model_name}
+precision: "bf16-mixed"
+image_size: 64
+
+model:
+  target: src.trainers.generative_trainer.GenerativeTrainer
+  params:
+    cfg:
+      trainer_type: generative
+      model_type: ddpm
+      expdir: ${expdir}
+      # Backbone (default: SimpleUNet stub — swap for diffusers UNet2DModel)
+      in_channels: 3
+      image_size: ${image_size}
+      model_channels: 128
+      channel_mult: [1, 2, 4, 8]
+      num_res_blocks: 2
+      # Noise schedule
+      num_timesteps: 1000
+      noise_schedule: cosine     # linear | cosine
+      beta_start: 1.0e-4
+      beta_end: 0.02
+      prediction_type: epsilon   # epsilon | v_prediction | x_start
+      # EMA
+      use_ema: true
+      ema_decay: 0.9999
+      # Training
+      steps: ${steps}
+      lr: 1.0e-4
+      warmup_steps: 2000
+      weight_decay: 0.0
+      betas: [0.9, 0.999]
+      precision: ${precision}
+
+data:
+  target: src.data.datamodule.ResearchDataModule
+  params:
+    cfg:
+      data_dir: ./data
+      image_size: ${image_size}
+      batch_size: 16
+      num_workers: 8
+      val_split: 0.05
+
+lightning:
+  logdir: ${logdir}
+  version_name: ${model_name}
+  slack_notify_every_n_epochs: 1
+  obsidian_log_every_n_epochs: 1
+  callbacks:
+    save_checkpoint:
+      target: lightning.pytorch.callbacks.ModelCheckpoint
+      params:
+        dirpath: ${expdir}
+        monitor: val_loss
+        mode: min
+        filename: "{epoch}-{step}-{val_loss:.4f}"
+        save_last: true
+        every_n_train_steps: 10000
+    learning_rate:
+      target: lightning.pytorch.callbacks.LearningRateMonitor
+      params:
+        logging_interval: step
+  trainer:
+    benchmark: true
+    accelerator: gpu
+    strategy: ddp
+    max_steps: ${steps}
+    log_every_n_steps: 100
+    precision: ${precision}
+    check_val_every_n_epoch: 1
+    num_sanity_val_steps: 1
+    gradient_clip_val: 1.0

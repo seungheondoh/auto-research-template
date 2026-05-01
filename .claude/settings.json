@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/semantic_scholar.py *)",
+      "Bash(python3 scripts/semantic_scholar.py *)",
+      "Bash(git add .research/discussions/*)",
+      "Bash(git commit *)",
+      "WebFetch(https://api.semanticscholar.org/*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(dd *)",
+      "Bash(mkfs *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/on_write.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
