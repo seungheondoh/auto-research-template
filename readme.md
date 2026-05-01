@@ -1,18 +1,48 @@
 # Auto-Research Template
 
-A PyTorch Lightning research template built for **human-AI collaborative research** — Claude handles literature search, hypothesis generation, and experiment scaffolding; you direct the science.
+A PyTorch Lightning research template for **human-AI collaborative research** — Claude handles literature search, hypothesis generation, and experiment scaffolding; you direct the science.
 
 | Paradigm | `trainer_type` | `model_type` options |
 |----------|---------------|----------------------|
-| Language Model | `lm` | causal, multimodal (prefix / cross_attn / adaLN) |
+| Language Model | `lm` | `causal`, `multimodal` (prefix / cross_attn / adaLN) |
 | Generative | `generative` | `vae`, `ddpm`, `flow_matching`, `drift` |
 | Representation | `representation` | `contrastive`, `byol`, `mae` |
 
 ---
 
-## Collaboration Model
+## How It Works
 
-This template structures research as a back-and-forth between you and Claude Code:
+Research here is a loop, not a pipeline. Each cycle moves from rough idea → structured hypotheses → running experiment → new questions.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     RESEARCH LOOP                               │
+│                                                                 │
+│   You have an idea                                              │
+│        │                                                        │
+│        ▼                                                        │
+│   /discuss <idea>          ← Claude + Semantic Scholar          │
+│        │                                                        │
+│        ├─ Phase 1: Claude restates your idea → you correct it   │
+│        ├─ Phase 2: 5 hypotheses generated → you filter them     │
+│        ├─ Phase 3: Claude enriches selected → related work,     │
+│        │           abstract, experiments, risk factors          │
+│        └─ Phase 4: saved to .research/discussions/              │
+│        │                                                        │
+│        ▼                                                        │
+│   Pick a hypothesis                                             │
+│        │                                                        │
+│        ▼                                                        │
+│   git checkout -b experiment/<slug>                             │
+│   python train.py --config config/...                           │
+│   tensorboard --logdir ./exp/                                   │
+│        │                                                        │
+│        ▼                                                        │
+│   Review results → /discuss again with what you learned  ◄──┐  │
+│        │                                                     │  │
+│        └─────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 | You bring | Claude brings |
 |-----------|--------------|
@@ -20,8 +50,6 @@ This template structures research as a back-and-forth between you and Claude Cod
 | Judgment on what to pursue | Structured hypothesis generation |
 | Experiment decisions | Config scaffolding and code changes |
 | Interpretation of results | Metric summaries and TensorBoard links |
-
-The `/discuss` command is the primary collaboration interface. It pauses at two decision points — **after restating your idea** and **after generating hypotheses** — so you stay in control of the scientific direction before any compute is spent.
 
 ---
 
@@ -72,18 +100,18 @@ export SEMANTIC_SCHOLAR_API_KEY="your-key-here"
 export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../xxx"
 ```
 
-After each validation epoch, the `SlackNotificationCallback` posts `val_loss`, `train_loss`, and a generated sample to that channel.
+After each validation epoch, `SlackNotificationCallback` posts `val_loss`, `train_loss`, and a generated sample to that channel.
 
 #### Obsidian (optional — experiment notes)
 
-Writes `.md` notes to a git repo that syncs with the [Obsidian](https://obsidian.md/) app via the [Obsidian Git](https://github.com/denolehov/obsidian-git) plugin.
+Writes `.md` notes to a git repo that syncs with [Obsidian](https://obsidian.md/) via the [Obsidian Git](https://github.com/denolehov/obsidian-git) plugin.
 
 ```bash
 git clone https://github.com/<you>/obsidian-sync /workspace/obsidian-sync
 export OBSIDIAN_VAULT_PATH="/workspace/obsidian-sync"
 ```
 
-The `ObsidianLogCallback` commits and pushes `experiments/{model_name}.md` with metrics and an ASCII loss curve after every validation epoch.
+`ObsidianLogCallback` commits and pushes `experiments/{model_name}.md` with metrics and an ASCII loss curve after every validation epoch.
 
 #### All at once
 
@@ -103,24 +131,27 @@ Permissions, hooks, and slash commands are pre-configured in `.claude/settings.j
 
 ---
 
-## Part 2 — Research Discussion (`/discuss`)
+## Part 2 — Your First Research Cycle (end to end)
 
-Use `/discuss` when you have a rough idea and want structured hypotheses + a Semantic Scholar novelty check before committing to an experiment.
+This walks through one full loop from idea to running experiment. Follow this the first time.
 
-### Collaborative pipeline
+### Step 1: Discuss your idea
 
 ```
-You: /discuss <your research idea>
-              │
-              ▼
-Phase 1 — Understand & Restate  (Claude)
-  Claude states: domain / problem / direction / template fit.
+/discuss flow matching for protein structure prediction
+```
+
+Claude runs a 4-phase pipeline. **It pauses twice for your input** before spending compute.
+
+```
+Phase 1 — Understand & Restate
+  Claude states its understanding of your idea.
   ──────────────────────────────────────────────────────
-  ★ YOU REVIEW: Is the framing right? Correct it before
-    hypotheses are generated — cheap to fix here.
+  ★ YOU REVIEW: Is the domain and direction right?
+    Correct it here — this is cheap to fix.
   ──────────────────────────────────────────────────────
-              │  (your go-ahead)
-              ▼
+  Reply: "yes" or describe corrections.
+
 Phase 2 — Divergent Ideation  (5 parallel sub-agents)
   ┌─ Agent 1: Methodological angle
   ├─ Agent 2: Application transfer angle
@@ -128,127 +159,92 @@ Phase 2 — Divergent Ideation  (5 parallel sub-agents)
   ├─ Agent 4: Theoretical angle
   └─ Agent 5: Data & training strategy angle
   ──────────────────────────────────────────────────────
-  ★ YOU REVIEW: Drop angles outside your scope/budget.
-    Each dropped hypothesis saves 5 API calls.
+  ★ YOU REVIEW: Claude shows 5 short hypotheses.
+    Drop any that are out of scope or over budget.
+    Each dropped hypothesis = 5 fewer API calls.
   ──────────────────────────────────────────────────────
-              │  (your selection)
-              ▼
-Phase 3 — Evaluation & Enrichment  (Claude, per hypothesis)
-  python scripts/semantic_scholar.py "<query>" --limit 5
-  → Related Work, Abstract, Experiments, Risk Factors
-              │
-              ▼
+  Reply: "1, 3, 4" or "all"
+
+Phase 3 — Enrichment  (per selected hypothesis)
+  Runs semantic_scholar.py, fills related work,
+  abstract, experiments, risk factors.
+
 Phase 4 — Save
   .research/discussions/YYYY-MM-DD-<slug>.json
-  JSON array — git-staged automatically.
+  Auto-staged by git hook.
 ```
 
-### Your decision points
-
-**After Phase 1 — correct the framing**
-
-Claude restates its understanding before generating anything. If the domain or direction is off, say so now.
-
+**Example correction at Phase 1:**
 ```
-Claude: "Domain: protein structure prediction, direction: flow matching..."
-You:    "Close — apply it to side-chain packing, not backbone folding."
+Claude: "Domain: protein backbone folding, direction: flow matching..."
+You:    "Close — target side-chain packing, not backbone."
 ```
 
-**After Phase 2 — filter hypotheses**
-
-Five hypotheses are shown before any Semantic Scholar queries run. Drop any that clearly overlap with work you know, don't fit your data, or exceed your compute budget.
-
+**Example filtering at Phase 2:**
 ```
 Claude: shows 5 hypotheses
-You:    "Agent 3 (efficiency) is out of scope. Skip it and enrich the other four."
+You:    "Agent 3 (efficiency) is out of scope. Enrich 1, 2, 4."
 ```
 
-**After Phase 3 — pick what to run**
+### Step 2: Pick a hypothesis and branch
 
-All enriched hypotheses are saved. Tell Claude which one to turn into an experiment — it will copy the right config and create a git branch.
+After Phase 3, Claude asks which hypothesis to turn into an experiment. It will create the branch and copy the config.
 
-```
-You: "H2 (application transfer) looks most actionable. Let's start there."
-Claude: sets up experiment/protein-side-chain branch and edits the config.
-```
-
-### Output schema (per hypothesis)
-
-```json
-{
-  "Name": "kebab-case-slug",
-  "Title": "Full descriptive research title",
-  "Short Hypothesis": "One sentence: method + outcome + mechanism.",
-  "Related Work": "Prior work X (YEAR) does Y. Gap: Z.",
-  "Abstract": "4-sentence mini-abstract.",
-  "Experiments": "Which configs, baselines, and metrics to run.",
-  "Risk Factors and Limitations": "2-3 concrete risks."
-}
+```bash
+# Claude does this, or you can do it manually:
+git checkout -b experiment/flow-matching-protein
+cp config/generative/flow_matching.yaml config/generative/protein_flow.yaml
 ```
 
-### Examples
+Commit the discussion brief on the branch so the scientific rationale stays with the code:
+
+```bash
+git add .research/discussions/2026-05-02-flow-matching-protein.json
+git commit -m "discuss: flow matching for protein side-chain packing"
+```
+
+### Step 3: Train
+
+Edit the config you copied (`config/generative/protein_flow.yaml`) to set `model_name`, `data_dir`, and any hyperparams.
+
+```bash
+python train.py --config config/generative/protein_flow.yaml
+tensorboard --logdir ./exp/
+```
+
+Check progress:
+```
+/status    ← current training metrics
+/results   ← latest val_loss and experiment list
+```
+
+### Step 4: Interpret and iterate
+
+When training finishes (or when you have early results), come back to `/discuss` with what you learned:
 
 ```
-/discuss flow matching for protein structure prediction
-/discuss self-supervised audio with masked spectrogram modeling
-/discuss LoRA rank sensitivity across model scales
+/discuss flow matching for protein side-chain packing —
+  our OT-CFM baseline hits 1.2Å RMSD on CASP14 but struggles
+  on long loops. ideas for improving loop modeling?
 ```
+
+This starts a new cycle. The new brief gets saved alongside the old one in `.research/discussions/`, building a record of your research thread.
 
 ---
 
-## Part 3 — Git-Based Experiment Branching
+## Part 3 — Running Hypotheses in Parallel
 
-Use one branch per hypothesis so you can run experiments in parallel, compare results cleanly, and merge only what works.
-
-### Branch convention
-
-```
-main                        ← stable, working codebase
-experiment/<slug>           ← one branch per hypothesis
-
-Examples:
-  experiment/flow-matching-protein
-  experiment/masked-spectrogram-ssl
-  experiment/lora-rank-sensitivity
-```
-
-### Workflow
+If you have multiple hypotheses worth testing at once, use `git worktree` to run them side by side without switching branches.
 
 ```bash
-# 1. After /discuss, create a branch for the chosen hypothesis
-git checkout -b experiment/flow-matching-protein
-
-# 2. Copy and edit the relevant config
-cp config/generative/flow_matching.yaml config/generative/protein_flow.yaml
-# set model_name, hyperparams, data_dir
-
-# 3. Train
-python train.py --config config/generative/protein_flow.yaml
-
-# 4. Check results
-tensorboard --logdir ./exp/
-/results
-
-# 5. If promising, merge back
-git checkout main
-git merge experiment/flow-matching-protein
-
-# 6. If not, leave or delete
-git branch -d experiment/flow-matching-protein
-```
-
-### Running multiple hypotheses in parallel (git worktree)
-
-`git worktree` lets you check out two branches side by side in separate directories — no stashing, no branch switching.
-
-```bash
-# Add a worktree for hypothesis 2 while hypothesis 1 runs in the main dir
+# Hypothesis 1 is already in the main working directory
+# Add a worktree for hypothesis 2
 git worktree add ../exp-masked-spectrogram experiment/masked-spectrogram-ssl
 
-# Train hypothesis 1 (GPU 0)
+# GPU 0: hypothesis 1
 python train.py --config config/representation/contrastive.yaml --gpu 0 &
 
-# Train hypothesis 2 in the worktree (GPU 1)
+# GPU 1: hypothesis 2 (in the worktree)
 cd ../exp-masked-spectrogram
 python train.py --config config/representation/byol.yaml --gpu 1 &
 
@@ -258,13 +254,15 @@ tensorboard --logdir_spec \
   h2:../exp-masked-spectrogram/exp/representation/byol
 ```
 
-### Discussion briefs follow the branch
-
-When Claude saves a `.research/discussions/` file, it is automatically staged by the post-write hook. Commit it on the experiment branch so the brief stays with the code that implements it.
-
+When results are in:
 ```bash
-git commit -m "discuss: flow matching for protein structure"
-git checkout -b experiment/flow-matching-protein
+# Merge what works
+git checkout main
+git merge experiment/masked-spectrogram-ssl
+
+# Delete what doesn't
+git branch -d experiment/contrastive-baseline
+git worktree remove ../exp-masked-spectrogram
 ```
 
 ---
@@ -272,12 +270,16 @@ git checkout -b experiment/flow-matching-protein
 ## Part 4 — Training Reference
 
 ```bash
-# All paradigms
+# Language models
 python train.py --config config/lm/default.yaml
+
+# Generative
 python train.py --config config/generative/ddpm.yaml
 python train.py --config config/generative/flow_matching.yaml
 python train.py --config config/generative/drift.yaml
 python train.py --config config/generative/vae.yaml
+
+# Representation
 python train.py --config config/representation/contrastive.yaml
 python train.py --config config/representation/byol.yaml
 
@@ -287,20 +289,49 @@ python train.py --config <path> --resume ./exp/<project>/<name>/last.ckpt
 tensorboard --logdir ./exp/
 ```
 
-### New experiment from scratch
+### Config schema
+
+```yaml
+project: "generative"
+model_name: my_exp
+steps: 100000
+logdir: ./exp
+expdir: ${logdir}/${project}/${model_name}
+
+model:
+  target: src.trainers.generative_trainer.GenerativeTrainer
+  params:
+    cfg:
+      trainer_type: generative
+      model_type: flow_matching
+
+data:
+  target: src.data.datamodule.ResearchDataModule
+  params:
+    cfg:
+      data_dir: ./data
+      batch_size: 16
+
+lightning:
+  slack_notify_every_n_epochs: 1
+  obsidian_log_every_n_epochs: 1
+  trainer:
+    accelerator: gpu
+    strategy: ddp
+    max_steps: ${steps}
+```
+
+---
+
+## Part 5 — Extending the Template
+
+### New experiment
+
+Copy the nearest config and adjust `model_name` and hyperparams — no code changes needed.
 
 ```bash
-# 1. Discuss with Claude and pick a hypothesis
-/discuss <idea>
-
-# 2. Branch
-git checkout -b experiment/<slug>
-
-# 3. Copy nearest config and adjust
 cp config/generative/ddpm.yaml config/generative/my_exp.yaml
-# set: model_name, model_type, hyperparams, data_dir
-
-# 4. Train
+# edit model_name, model_type, data_dir, hyperparams
 python train.py --config config/generative/my_exp.yaml
 ```
 
@@ -313,6 +344,21 @@ cp config/generative/ddpm.yaml config/my_paradigm/default.yaml
 # set target: src.trainers.my_trainer.MyTrainer
 python train.py --config config/my_paradigm/default.yaml
 ```
+
+### Custom dataset
+
+Subclass `ResearchDataModule` and override `_build_datasets()` in `src/data/`.
+
+---
+
+## Slash Commands
+
+| Command | What it does |
+|---------|-------------|
+| `/discuss <idea>` | Research ideation — 5 hypotheses, Semantic Scholar enrichment, saved to `.research/discussions/` |
+| `/train` | Start a training run (prompts for config) |
+| `/status` | Check current training metrics |
+| `/results` | Show latest experiment results and discussion briefs |
 
 ---
 
@@ -334,11 +380,23 @@ auto-research-template/
 │   ├── setup_env.sh
 │   └── semantic_scholar.py
 ├── .research/
-│   └── discussions/       # briefs saved by /discuss (auto-staged)
+│   └── discussions/       # briefs saved by /discuss (auto-staged by hook)
 └── .claude/
     ├── settings.json      # permissions + hooks
     ├── commands/
     │   └── discuss.md     # /discuss orchestration
     └── hooks/
-        └── on_write.sh    # auto-stages discussion files
+        └── on_write.sh    # auto-stages discussion files after Write
 ```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Required for `/discuss` | Claude API access |
+| `SEMANTIC_SCHOLAR_API_KEY` | Optional | 1 req/sec instead of 100 req/5min |
+| `SLACK_WEBHOOK_URL` | Optional | Epoch notifications |
+| `OBSIDIAN_VAULT_PATH` | Optional | Auto-sync experiment notes |
+| `CUDA_VISIBLE_DEVICES` | Optional | GPU selection (or use `--gpu`) |
