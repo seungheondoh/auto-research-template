@@ -1,0 +1,68 @@
+# Sweep manifest — declare your experiment ablation here.
+# Run: bash scripts/run_sweep.sh
+# Report: python scripts/orchestrator.py
+
+name: my_sweep
+description: >
+  Ablation study comparing [FILL IN: what you are comparing].
+  Backbone is held constant; only [FILL IN: what varies] differs across runs.
+
+date: 2026-05-02
+steps: 10000  # shared default; individual experiments can override
+
+# ── Shared backbone ───────────────────────────────────────────────────────────
+backbone:
+  trainer_type: generative   # lm | generative | representation
+  model_type: ddpm            # see trainer registry in CLAUDE.md
+  optimizer: AdamW
+  lr: 1.0e-4
+  warmup_steps: 1000
+  batch_size: 16
+  dataset: ./data
+
+# ── Experiments ──────────────────────────────────────────────────────────────
+# Each entry maps to a config file in config/.
+# 'id' becomes the model_name and determines exp/{project}/{id}/ output path.
+# 'hypothesis' feeds into the multi-agent orchestrator for analysis.
+
+experiments:
+  - id: ddpm
+    config: config/generative/ddpm.yaml
+    model_type: ddpm
+    description: >
+      DDPM ε-prediction baseline. Standard noise schedule with linear β.
+    hypothesis: >
+      DDPM with ε-prediction will serve as a stable baseline.
+      Val loss should converge within 10k steps on this dataset size.
+
+  - id: flow_matching
+    config: config/generative/flow_matching.yaml
+    model_type: flow_matching
+    description: >
+      OT-CFM velocity field. Straight trajectories via optimal transport coupling.
+    hypothesis: >
+      Flow matching will match or beat DDPM val loss with fewer NFE at inference,
+      because straighter trajectories are easier to learn.
+
+  - id: drift
+    config: config/generative/drift.yaml
+    model_type: drift
+    description: >
+      Stochastic interpolant (drift diffusion). Bridges source and target distributions
+      via a learned drift term.
+    hypothesis: >
+      Drift will achieve lower val loss than DDPM due to the learned drift correcting
+      approximation errors in the ODE solver.
+
+# ── Metrics ──────────────────────────────────────────────────────────────────
+metrics:
+  primary: val_loss
+  secondary:
+    - train_loss
+    - learning_rate
+
+# ── Report ───────────────────────────────────────────────────────────────────
+report:
+  output_note: my_sweep_report
+  include_ascii_curves: true
+  num_samples: 3

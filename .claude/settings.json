@@ -1,16 +1,41 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python scripts/semantic_scholar.py *)",
-      "Bash(python3 scripts/semantic_scholar.py *)",
-      "Bash(git add .research/discussions/*)",
-      "Bash(git commit *)",
+      "Read",
+      "Edit",
+      "Write",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(pip *)",
+      "Bash(uv *)",
+      "Bash(git *)",
+      "Bash(bash scripts/*)",
+      "Bash(source scripts/*)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(cat *)",
+      "Bash(tail *)",
+      "Bash(head *)",
+      "Bash(mkdir *)",
+      "Bash(chmod *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(echo *)",
+      "Bash(tensorboard *)",
+      "Bash(ps *)",
+      "Bash(kill *)",
+      "Bash(nohup *)",
+      "Bash(wc *)",
       "WebFetch(https://api.semanticscholar.org/*)"
     ],
     "deny": [
       "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(sudo rm *)",
       "Bash(dd *)",
-      "Bash(mkfs *)"
+      "Bash(mkfs *)",
+      "Bash(shred *)"
     ]
   },
   "hooks": {
